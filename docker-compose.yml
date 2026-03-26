@@ -1,0 +1,40 @@
+version: "3.9"
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_DEFAULT_RELAYS: ${VITE_DEFAULT_RELAYS:-wss://relay.damus.io,wss://relay.nostr.band,wss://nos.lol}
+        VITE_BLOSSOM_SERVER_URL: ${VITE_BLOSSOM_SERVER_URL:-http://localhost:3001}
+    ports:
+      - "${WEB_PORT:-3000}:80"
+    depends_on:
+      - strfry
+      - blossom
+    restart: unless-stopped
+
+  strfry:
+    build:
+      context: ./infra/strfry
+      dockerfile: Dockerfile
+    ports:
+      - "${STRFRY_PORT:-7777}:7777"
+    volumes:
+      - strfry_data:/app/strfry-db
+    restart: unless-stopped
+
+  blossom:
+    build:
+      context: ./infra/blossom
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    volumes:
+      - blossom_data:/data/uploads
+    restart: unless-stopped
+
+volumes:
+  strfry_data:
+  blossom_data:
