@@ -115,10 +115,12 @@ The Docker Compose stack starts:
 ```bash
 # Build and start all services
 docker compose up --build
-
-# Access the app
-open http://localhost:3000
 ```
+
+Once running:
+- **Web app** → http://localhost:3000
+- **Strfry relay** → ws://localhost:7777
+- **Blossom file server** → http://localhost:3001
 
 The local relay is reachable at `ws://localhost:7777`. Add it in the app's relay settings.
 
@@ -140,6 +142,26 @@ Copy `.env.example` to `.env` and adjust:
 | `VITE_BLOSSOM_SERVER_URL` | `http://localhost:3001` | Blossom server URL baked into the web build |
 
 > **Note:** `VITE_*` variables are embedded at Docker build time (Vite SPA). If you change them, rebuild with `docker compose up --build`.
+
+---
+
+## Export / Transfer to another machine
+
+```bash
+./export.sh
+```
+
+Creates a timestamped `.tar.gz` (excludes `node_modules`, `dist`, `.turbo`, `.git`) and prints AirDrop / rsync instructions.
+
+On the receiving machine:
+
+```bash
+tar -xzf nostr-chat-<timestamp>.tar.gz
+cd nostr-chat-<timestamp>   # or whatever the folder is named
+bun install
+cp .env.example .env        # edit as needed
+docker compose up --build
+```
 
 ---
 

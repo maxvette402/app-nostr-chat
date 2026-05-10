@@ -43,7 +43,7 @@ describe("keyPairFromNsec", () => {
 describe("keyPairFromHex", () => {
   it("round-trips through hex", () => {
     const original = generateKeyPair();
-    const hexPriv = Buffer.from(original.privateKey).toString("hex");
+    const hexPriv = Array.from(original.privateKey).map(b => b.toString(16).padStart(2, "0")).join("");
     const recovered = keyPairFromHex(hexPriv);
     expect(recovered.publicKey).toBe(original.publicKey);
   });

@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import { useKeyStore } from "../store/keyStore.ts";
 import { useContactStore } from "../store/contactStore.ts";
 import { useMessageStore } from "../store/messageStore.ts";
 import MessageBubble from "./MessageBubble.tsx";
@@ -7,7 +6,6 @@ import MessageInput from "./MessageInput.tsx";
 import { useNostr } from "../hooks/useNostr.ts";
 
 export default function ConversationView({ peerPubkey }: { peerPubkey: string }) {
-  const { npub } = useKeyStore();
   const { getContact } = useContactStore();
   const { getMessages } = useMessageStore();
   const { sendMessage } = useNostr();

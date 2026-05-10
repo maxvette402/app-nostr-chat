@@ -30,9 +30,6 @@ export default function Sidebar() {
     }
   };
 
-  const unreadFor = (pubkey: string) =>
-    (conversations[pubkey] ?? []).filter((m) => m.direction === "received").length;
-
   const sortedContacts = [...contacts].sort((a, b) => {
     const la = conversations[a.pubkey]?.at(-1)?.createdAt ?? 0;
     const lb = conversations[b.pubkey]?.at(-1)?.createdAt ?? 0;
@@ -164,7 +161,6 @@ function ContactRow({
   onClick: () => void;
   onRemove: () => void;
 }) {
-  const [showMenu, setShowMenu] = useState(false);
   const label = contact.displayName ?? `${contact.npub.slice(0, 12)}…`;
 
   return (

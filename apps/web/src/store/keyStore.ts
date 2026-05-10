@@ -95,7 +95,7 @@ export const useKeyStore = create<KeyState>()((set, get) => ({
     }
     if (signerType === "manual" && privateKey) {
       const { finalizeEvent } = await import("nostr-tools");
-      return finalizeEvent(event as Parameters<typeof finalizeEvent>[0], privateKey) as Record<string, unknown>;
+      return finalizeEvent(event as Parameters<typeof finalizeEvent>[0], privateKey) as unknown as Record<string, unknown>;
     }
     throw new Error("Not logged in");
   },

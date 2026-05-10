@@ -8,7 +8,6 @@ import type { Message, FileAttachment } from "@nostr-chat/core";
 import { useKeyStore } from "../store/keyStore.ts";
 import { useRelayStore } from "../store/relayStore.ts";
 import { useMessageStore } from "../store/messageStore.ts";
-import { useContactStore } from "../store/contactStore.ts";
 import { env } from "../env.ts";
 
 export function useNostr() {
@@ -16,7 +15,6 @@ export function useNostr() {
   const { privateKey, publicKey, isLoggedIn } = useKeyStore();
   const { relays } = useRelayStore();
   const { addMessage } = useMessageStore();
-  const { addContact, contacts } = useContactStore();
 
   // Initialise / reinitialise manager when relays or login state change
   useEffect(() => {
