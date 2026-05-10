@@ -32,11 +32,7 @@ export class RelayManager {
     return () => this.statusCallbacks.delete(cb);
   }
 
-  private emitStatus(url: string, status: RelayStatus): void {
-    this.statusCallbacks.forEach((cb) => cb(url, status));
-  }
-
-  /** Subscribe to incoming events matching filters on read relays. */
+/** Subscribe to incoming events matching filters on read relays. */
   subscribe(
     id: string,
     filters: Filter[],

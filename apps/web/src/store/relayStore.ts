@@ -61,6 +61,18 @@ export const useRelayStore = create<RelayState>()(
         set((s) => ({ statuses: { ...s.statuses, [url]: status } }));
       },
     }),
-    { name: "nostr-relays" }
+    {
+      name: "nostr-relays",
+      merge: (persisted: unknown, current) => {
+        const p = persisted as Partial<RelayState>;
+        // If the env-configured relay URLs changed, reset to the new defaults
+        const persistedUrls = (p.relays ?? []).map((r) => r.url).sort().join(",");
+        const defaultUrls = defaultRelays.map((r) => r.url).sort().join(",");
+        if (persistedUrls !== defaultUrls && defaultUrls !== "") {
+          return { ...current, relays: defaultRelays };
+        }
+        return { ...current, ...p };
+      },
+    }
   )
 );

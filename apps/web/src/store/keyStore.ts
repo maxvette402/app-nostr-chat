@@ -1,6 +1,23 @@
 import { create } from "zustand";
 import { keyPairFromNsec, keyPairFromHex, isValidNsec, isValidHexKey, hexToNpub } from "@nostr-chat/core";
 
+const SESSION_KEY = "nostr-session";
+
+function persistSession(data: { nsec?: string; signerType: string }) {
+  localStorage.setItem(SESSION_KEY, JSON.stringify(data));
+}
+function clearPersistedSession() {
+  localStorage.removeItem(SESSION_KEY);
+}
+function loadPersistedSession(): { nsec?: string; signerType: string } | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 type SignerType = "extension" | "manual";
 
 interface KeyState {
@@ -27,12 +44,23 @@ declare global {
   }
 }
 
+function initFromSession(): Partial<KeyState> {
+  const session = loadPersistedSession();
+  if (!session) return {};
+  if (session.signerType === "manual" && session.nsec && isValidNsec(session.nsec)) {
+    const kp = keyPairFromNsec(session.nsec);
+    return { privateKey: kp.privateKey, publicKey: kp.publicKey, npub: kp.npub, signerType: "manual", isLoggedIn: true };
+  }
+  return {};
+}
+
 export const useKeyStore = create<KeyState>()((set, get) => ({
   privateKey: null,
   publicKey: null,
   npub: null,
   signerType: null,
   isLoggedIn: false,
+  ...initFromSession(),
 
   loginWithExtension: async () => {
     if (!window.nostr) {
@@ -54,6 +82,7 @@ export const useKeyStore = create<KeyState>()((set, get) => ({
       throw new Error("Invalid nsec key");
     }
     const kp = keyPairFromNsec(nsec);
+    persistSession({ nsec, signerType: "manual" });
     set({
       privateKey: kp.privateKey,
       publicKey: kp.publicKey,
@@ -68,6 +97,7 @@ export const useKeyStore = create<KeyState>()((set, get) => ({
       throw new Error("Invalid hex private key (must be 64 hex characters)");
     }
     const kp = keyPairFromHex(hex);
+    persistSession({ nsec: kp.nsec, signerType: "manual" });
     set({
       privateKey: kp.privateKey,
       publicKey: kp.publicKey,
@@ -78,6 +108,7 @@ export const useKeyStore = create<KeyState>()((set, get) => ({
   },
 
   logout: () => {
+    clearPersistedSession();
     set({
       privateKey: null,
       publicKey: null,
