@@ -45,7 +45,7 @@ export function useNostr() {
       manager.destroy();
       managerRef.current = null;
     };
-  }, [isLoggedIn, publicKey, relays]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLoggedIn, publicKey, privateKey, relays]);
 
   const sendMessage = useCallback(
     async (recipientPubkey: string, text: string, file?: File): Promise<void> => {

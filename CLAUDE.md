@@ -24,6 +24,13 @@ bun run --cwd apps/mobile ios           # iOS simulator
 bun run --cwd apps/mobile android       # Android emulator
 ```
 
+**Run a single test file:**
+```bash
+bun run --cwd packages/core vitest run src/crypto/encrypt.test.ts
+```
+
+Vitest is configured with `globals: true` — no need to import `describe`, `it`, or `expect` in test files.
+
 **Docker (self-hosted stack):**
 ```bash
 docker compose up --build    # Build and start web + strfry relay + blossom file server
@@ -58,19 +65,24 @@ Tests live in `packages/core/src/**/*.test.ts` (Vitest + happy-dom).
 
 Vite + React 18 + React Router v6. Path alias `@/` maps to `apps/web/src/`.
 
-**State:** Four Zustand stores — `keyStore` (active keypair), `messageStore` (decrypted DMs), `contactStore`, `relayStore`. Stores persist to IndexedDB via the core library.
+**State:** Four Zustand stores — `keyStore` (active keypair), `messageStore` (decrypted DMs), `contactStore`, `relayStore`. Stores persist to IndexedDB via the core library, except `messageStore` which is intentionally in-memory only.
 
 **Key files:**
 - `src/hooks/useNostr.ts` — bootstraps `RelayManager`, subscribes to kind-1059 (Gift Wrap) events, feeds decrypted messages into `messageStore`
+- `src/env.ts` — Zod-validated runtime environment (falls back to localhost defaults)
 - `src/pages/LoginPage.tsx` — NIP-07 extension OR manual nsec/hex import
 - `src/pages/ChatPage.tsx` — conversation list + message view
 - `src/components/` — `ConversationView`, `MessageBubble`, file upload UI
 
 Production build → nginx Docker image (multi-stage Dockerfile in `apps/web/`).
 
+**Duplicate files:** `apps/web/src/store/`, `src/components/`, and `src/pages/` each contain both `.ts`/`.tsx` and `.js` versions of every file — both are committed to git. The `.tsx`/`.ts` files are canonical; the `.js` files appear to be compiled output that was accidentally committed.
+
 ### `apps/mobile` — Expo / React Native
 
 Expo Router (file-based routing under `apps/mobile/app/`). Shares the same Zustand store shape as web. Uses `expo-secure-store` instead of IndexedDB for private key storage. NativeWind provides Tailwind-compatible styling.
+
+Path alias `@/` maps to `apps/mobile/` (the package root, not `src/`) — different from the web app.
 
 ### Message flow
 
@@ -84,6 +96,15 @@ Files:   encryptFile() → Blossom HTTP upload → encrypted URL embedded in mes
 
 NIP-01 (base), NIP-04 (legacy compat), NIP-07 (browser extension), NIP-17 (private DMs), NIP-44 (versioned encryption), NIP-59 (Gift Wrap).
 
+## Security invariants
+
+- `privateKey` (raw `Uint8Array`) in `keyStore` is **never** written to any storage — it lives only in Zustand memory for the session lifetime.
+- For manual login, the nsec string is stored in `localStorage` so sessions survive page refresh, but the derived `privateKey` is only reconstructed in memory on load.
+- For NIP-07 extension login, the app never touches the private key at all — all signing is delegated to `window.nostr.signEvent()`.
+
 ## Environment
 
-Copy `.env.example` → `.env` before running. Key vars: relay WebSocket URLs, Blossom server URL, service ports.
+Copy `.env.example` → `.env` before running. Vars split into two groups:
+
+- **Docker-level** (no prefix): `WEB_PORT`, `STRFRY_PORT`, `NODE_ENV` — used by `docker-compose.yml` and nginx only.
+- **Vite build-time** (`VITE_` prefix): `VITE_DEFAULT_RELAYS`, `VITE_BLOSSOM_SERVER_URL` — bundled into the browser app. Validated at startup via Zod in `apps/web/src/env.ts` with localhost fallbacks.
