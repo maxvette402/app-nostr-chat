@@ -78,9 +78,7 @@ export async function getAllMessages(): Promise<Message[]> {
 export async function deleteMessages(peerPubkey: string): Promise<void> {
   const messages = await getMessages(peerPubkey);
   const store = await getStore("messages", "readwrite");
-  for (const msg of messages) {
-    store.delete(msg.id);
-  }
+  await Promise.all(messages.map((msg) => promisify(store.delete(msg.id))));
 }
 
 // --- Contacts ---

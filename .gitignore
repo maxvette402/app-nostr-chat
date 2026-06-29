@@ -3,6 +3,9 @@ node_modules/
 dist/
 build/
 coverage/
+# Compiled JS accidentally committed alongside TS source
+apps/web/src/**/*.js
+apps/mobile/src/**/*.js
 *.local
 .env
 .env.*

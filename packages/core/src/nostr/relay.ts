@@ -44,7 +44,7 @@ export class RelayManager {
     const readRelays = this.getReadRelays();
     if (readRelays.length === 0) return;
 
-    const sub = this.pool.subscribeMany(readRelays, filters[0], {
+    const sub = this.pool.subscribeMany(readRelays, filters, {
       onevent: onEvent,
       oneose: onEose,
     });
@@ -78,7 +78,7 @@ export class RelayManager {
   async queryEvents(filters: Filter[]): Promise<Event[]> {
     const readRelays = this.getReadRelays();
     if (readRelays.length === 0) return [];
-    return this.pool.querySync(readRelays, filters[0]);
+    return this.pool.querySync(readRelays, filters);
   }
 
   destroy(): void {
