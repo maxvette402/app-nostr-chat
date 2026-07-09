@@ -3,6 +3,9 @@ import { nip19 } from "nostr-tools";
 const bytesToHex = (b: Uint8Array): string =>
   Array.from(b).map((x) => x.toString(16).padStart(2, "0")).join("");
 const hexToBytes = (hex: string): Uint8Array => {
+  if (!/^([0-9a-fA-F]{2})+$/.test(hex)) {
+    throw new Error("Invalid hex string: must have an even length and contain only hex characters");
+  }
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < hex.length; i += 2) bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
   return bytes;
@@ -29,6 +32,9 @@ export function keyPairFromNsec(nsec: string): KeyPair {
 }
 
 export function keyPairFromHex(hexPrivKey: string): KeyPair {
+  if (!isValidHexKey(hexPrivKey)) {
+    throw new Error("Invalid hex private key (must be 64 hex characters)");
+  }
   const privateKey = hexToBytes(hexPrivKey);
   return buildKeyPair(privateKey);
 }

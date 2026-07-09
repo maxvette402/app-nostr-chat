@@ -1,15 +1,32 @@
 import { create } from "zustand";
-import { keyPairFromNsec, keyPairFromHex, isValidNsec, isValidHexKey, hexToNpub } from "@nostr-chat/core";
+import {
+  keyPairFromNsec,
+  keyPairFromHex,
+  isValidNsec,
+  isValidHexKey,
+  hexToNpub,
+  encryptWithPassphrase,
+  decryptWithPassphrase,
+  createPrivateKeySigner,
+} from "@nostr-chat/core";
+import type { EncryptedSecret, Signer } from "@nostr-chat/core";
+import { createExtensionSigner } from "../lib/extensionSigner.ts";
+import "../lib/nostrWindow.ts";
 
 const SESSION_KEY = "nostr-session";
 
-function persistSession(data: { nsec?: string; signerType: string }) {
+interface PersistedSession {
+  signerType: "manual";
+  encryptedNsec: EncryptedSecret;
+}
+
+function persistSession(data: PersistedSession) {
   localStorage.setItem(SESSION_KEY, JSON.stringify(data));
 }
 function clearPersistedSession() {
   localStorage.removeItem(SESSION_KEY);
 }
-function loadPersistedSession(): { nsec?: string; signerType: string } | null {
+function loadPersistedSession(): PersistedSession | null {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
     return raw ? JSON.parse(raw) : null;
@@ -23,35 +40,37 @@ type SignerType = "extension" | "manual";
 interface KeyState {
   /** Private key — NEVER persisted to storage. */
   privateKey: Uint8Array | null;
-  publicKey: string | null;    // hex
-  npub: string | null;         // bech32
+  publicKey: string | null; // hex
+  npub: string | null; // bech32
   signerType: SignerType | null;
   isLoggedIn: boolean;
+  /** True if an encrypted session exists in localStorage but hasn't been unlocked yet. */
+  hasLockedSession: boolean;
 
   loginWithExtension: () => Promise<void>;
-  loginWithNsec: (nsec: string) => void;
-  loginWithHex: (hex: string) => void;
+  loginWithNsec: (nsec: string, passphrase: string) => Promise<void>;
+  loginWithHex: (hex: string, passphrase: string) => Promise<void>;
+  unlock: (passphrase: string) => Promise<void>;
   logout: () => void;
+  getSigner: () => Signer;
   signEvent: (event: Record<string, unknown>) => Promise<Record<string, unknown>>;
 }
 
-declare global {
-  interface Window {
-    nostr?: {
-      getPublicKey(): Promise<string>;
-      signEvent(event: Record<string, unknown>): Promise<Record<string, unknown>>;
-    };
-  }
-}
-
-function initFromSession(): Partial<KeyState> {
-  const session = loadPersistedSession();
-  if (!session) return {};
-  if (session.signerType === "manual" && session.nsec && isValidNsec(session.nsec)) {
-    const kp = keyPairFromNsec(session.nsec);
-    return { privateKey: kp.privateKey, publicKey: kp.publicKey, npub: kp.npub, signerType: "manual", isLoggedIn: true };
-  }
-  return {};
+async function loginManual(
+  set: (partial: Partial<KeyState>) => void,
+  kp: { privateKey: Uint8Array; publicKey: string; npub: string; nsec: string },
+  passphrase: string
+) {
+  const encryptedNsec = await encryptWithPassphrase(kp.nsec, passphrase);
+  persistSession({ signerType: "manual", encryptedNsec });
+  set({
+    privateKey: kp.privateKey,
+    publicKey: kp.publicKey,
+    npub: kp.npub,
+    signerType: "manual",
+    isLoggedIn: true,
+    hasLockedSession: false,
+  });
 }
 
 export const useKeyStore = create<KeyState>()((set, get) => ({
@@ -60,7 +79,7 @@ export const useKeyStore = create<KeyState>()((set, get) => ({
   npub: null,
   signerType: null,
   isLoggedIn: false,
-  ...initFromSession(),
+  hasLockedSession: loadPersistedSession() !== null,
 
   loginWithExtension: async () => {
     if (!window.nostr) {
@@ -74,36 +93,54 @@ export const useKeyStore = create<KeyState>()((set, get) => ({
       npub,
       signerType: "extension",
       isLoggedIn: true,
+      hasLockedSession: false,
     });
   },
 
-  loginWithNsec: (nsec: string) => {
+  loginWithNsec: async (nsec: string, passphrase: string) => {
     if (!isValidNsec(nsec)) {
       throw new Error("Invalid nsec key");
     }
+    if (!passphrase) {
+      throw new Error("A passphrase is required to protect your key at rest");
+    }
     const kp = keyPairFromNsec(nsec);
-    persistSession({ nsec, signerType: "manual" });
-    set({
-      privateKey: kp.privateKey,
-      publicKey: kp.publicKey,
-      npub: kp.npub,
-      signerType: "manual",
-      isLoggedIn: true,
-    });
+    await loginManual(set, kp, passphrase);
   },
 
-  loginWithHex: (hex: string) => {
+  loginWithHex: async (hex: string, passphrase: string) => {
     if (!isValidHexKey(hex)) {
       throw new Error("Invalid hex private key (must be 64 hex characters)");
     }
+    if (!passphrase) {
+      throw new Error("A passphrase is required to protect your key at rest");
+    }
     const kp = keyPairFromHex(hex);
-    persistSession({ nsec: kp.nsec, signerType: "manual" });
+    await loginManual(set, kp, passphrase);
+  },
+
+  unlock: async (passphrase: string) => {
+    const session = loadPersistedSession();
+    if (!session) {
+      throw new Error("No saved session found");
+    }
+    let nsec: string;
+    try {
+      nsec = await decryptWithPassphrase(session.encryptedNsec, passphrase);
+    } catch {
+      throw new Error("Incorrect passphrase");
+    }
+    if (!isValidNsec(nsec)) {
+      throw new Error("Saved session is corrupted");
+    }
+    const kp = keyPairFromNsec(nsec);
     set({
       privateKey: kp.privateKey,
       publicKey: kp.publicKey,
       npub: kp.npub,
       signerType: "manual",
       isLoggedIn: true,
+      hasLockedSession: false,
     });
   },
 
@@ -115,7 +152,19 @@ export const useKeyStore = create<KeyState>()((set, get) => ({
       npub: null,
       signerType: null,
       isLoggedIn: false,
+      hasLockedSession: false,
     });
+  },
+
+  getSigner: () => {
+    const { signerType, privateKey } = get();
+    if (signerType === "extension") {
+      return createExtensionSigner();
+    }
+    if (signerType === "manual" && privateKey) {
+      return createPrivateKeySigner(privateKey);
+    }
+    throw new Error("Not logged in");
   },
 
   signEvent: async (event) => {

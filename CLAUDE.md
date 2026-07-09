@@ -76,8 +76,6 @@ Vite + React 18 + React Router v6. Path alias `@/` maps to `apps/web/src/`.
 
 Production build → nginx Docker image (multi-stage Dockerfile in `apps/web/`).
 
-**Duplicate files:** `apps/web/src/store/`, `src/components/`, and `src/pages/` each contain both `.ts`/`.tsx` and `.js` versions of every file — both are committed to git. The `.tsx`/`.ts` files are canonical; the `.js` files appear to be compiled output that was accidentally committed.
-
 ### `apps/mobile` — Expo / React Native
 
 Expo Router (file-based routing under `apps/mobile/app/`). Shares the same Zustand store shape as web. Uses `expo-secure-store` instead of IndexedDB for private key storage. NativeWind provides Tailwind-compatible styling.

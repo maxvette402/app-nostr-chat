@@ -24,6 +24,7 @@ export interface FileAttachment {
   sizeBytes: number;
   encryptionKey: string;   // hex-encoded AES-256-GCM key
   encryptionIv: string;    // hex-encoded IV
+  sha256: string;          // hex-encoded hash of the encrypted blob, for integrity checks
 }
 
 export interface RelayConfig {
