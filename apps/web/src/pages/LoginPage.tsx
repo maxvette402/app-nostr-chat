@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { useKeyStore } from "../store/keyStore.ts";
-import { generateKeyPair } from "@nostr-chat/core";
+import { generateKeyPair, isValidHexKey, isValidNsec } from "@nostr-chat/core";
 
 type Tab = "extension" | "nsec" | "generate";
 
 export default function LoginPage() {
   const [tab, setTab] = useState<Tab>("extension");
   const [nsecInput, setNsecInput] = useState("");
+  const [nsecPassphrase, setNsecPassphrase] = useState("");
+  const [genPassphrase, setGenPassphrase] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [generatedKey, setGeneratedKey] = useState<{ nsec: string; npub: string } | null>(null);
 
-  const { loginWithExtension, loginWithNsec } = useKeyStore();
+  const { loginWithExtension, loginWithNsec, loginWithHex } = useKeyStore();
 
   const handleExtension = async () => {
     setError("");
@@ -25,12 +27,26 @@ export default function LoginPage() {
     }
   };
 
-  const handleNsec = () => {
+  const handleNsec = async () => {
     setError("");
+    const trimmed = nsecInput.trim();
+    if (!nsecPassphrase) {
+      setError("Choose a passphrase to protect your key on this device");
+      return;
+    }
+    setLoading(true);
     try {
-      loginWithNsec(nsecInput.trim());
+      if (isValidNsec(trimmed)) {
+        await loginWithNsec(trimmed, nsecPassphrase);
+      } else if (isValidHexKey(trimmed)) {
+        await loginWithHex(trimmed, nsecPassphrase);
+      } else {
+        throw new Error("Invalid key — expected nsec1… or 64-char hex");
+      }
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -39,9 +55,18 @@ export default function LoginPage() {
     setGeneratedKey({ nsec: kp.nsec, npub: kp.npub });
   };
 
-  const handleLoginWithGenerated = () => {
+  const handleLoginWithGenerated = async () => {
     if (!generatedKey) return;
-    loginWithNsec(generatedKey.nsec);
+    if (!genPassphrase) {
+      setError("Choose a passphrase to protect your key on this device");
+      return;
+    }
+    setError("");
+    try {
+      await loginWithNsec(generatedKey.nsec, genPassphrase);
+    } catch (e) {
+      setError((e as Error).message);
+    }
   };
 
   const tabs: { id: Tab; label: string }[] = [
@@ -115,12 +140,24 @@ export default function LoginPage() {
                 onChange={(e) => setNsecInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleNsec()}
               />
+              <input
+                type="password"
+                className="input"
+                placeholder="Choose a passphrase to protect it on this device"
+                value={nsecPassphrase}
+                onChange={(e) => setNsecPassphrase(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleNsec()}
+              />
+              <p className="text-xs text-gray-500">
+                Your key is encrypted with this passphrase before it's saved so you
+                stay logged in across page refreshes. You'll need it to unlock next time.
+              </p>
               <button
                 onClick={handleNsec}
-                disabled={!nsecInput.trim()}
+                disabled={loading || !nsecInput.trim() || !nsecPassphrase}
                 className="btn-primary w-full"
               >
-                Login
+                {loading ? "Logging in..." : "Login"}
               </button>
             </div>
           )}
@@ -156,8 +193,17 @@ export default function LoginPage() {
                   <p className="text-xs text-yellow-400">
                     Save your nsec key before continuing. You will not see it again.
                   </p>
+                  <input
+                    type="password"
+                    className="input"
+                    placeholder="Choose a passphrase to protect it on this device"
+                    value={genPassphrase}
+                    onChange={(e) => setGenPassphrase(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleLoginWithGenerated()}
+                  />
                   <button
                     onClick={handleLoginWithGenerated}
+                    disabled={!genPassphrase}
                     className="btn-primary w-full"
                   >
                     I have saved my key — Login

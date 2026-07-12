@@ -29,5 +29,6 @@ export function nowSeconds(): number {
 /** Randomise timestamp within ±2 days to improve privacy (NIP-59). */
 export function randomisedTimestamp(): number {
   const twoDays = 2 * 24 * 60 * 60;
-  return nowSeconds() - Math.floor(Math.random() * twoDays);
+  const randomFraction = crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32;
+  return nowSeconds() - Math.floor(randomFraction * twoDays);
 }

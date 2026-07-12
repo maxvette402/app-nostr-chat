@@ -2,8 +2,8 @@ import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, Keyboard
 import { useState, useEffect } from "react";
 import { router } from "expo-router";
 import * as SecureStore from "expo-secure-store";
-import { RelayManager, buildDm, receiveDm, keyPairFromNsec } from "@nostr-chat/core";
-import type { Message } from "@nostr-chat/core";
+import { RelayManager, buildDm, receiveDm, keyPairFromNsec, createPrivateKeySigner } from "@nostr-chat/core";
+import type { Message, Signer } from "@nostr-chat/core";
 
 const DEFAULT_RELAYS = [
   { url: "wss://relay.damus.io", read: true, write: true },
@@ -19,7 +19,7 @@ export default function ChatScreen() {
   const [text, setText] = useState("");
   const [myPubkey, setMyPubkey] = useState("");
   const [manager, setManager] = useState<RelayManager | null>(null);
-  const [privkey, setPrivkey] = useState<Uint8Array | null>(null);
+  const [signer, setSigner] = useState<Signer | null>(null);
 
   useEffect(() => {
     let mgr: RelayManager;
@@ -34,7 +34,8 @@ export default function ChatScreen() {
 
       const kp = keyPairFromNsec(nsec);
       setMyPubkey(kp.publicKey);
-      setPrivkey(kp.privateKey);
+      const kpSigner = createPrivateKeySigner(kp.privateKey);
+      setSigner(kpSigner);
 
       mgr = new RelayManager();
       mgr.setRelays(DEFAULT_RELAYS);
@@ -44,13 +45,14 @@ export default function ChatScreen() {
         "inbox",
         [{ kinds: [1059], "#p": [kp.publicKey], limit: 50 }],
         (event) => {
-          const msg = receiveDm(event, kp.privateKey, kp.publicKey);
-          if (msg) {
-            setMessages((prev) => {
-              if (prev.some((m) => m.id === msg.id)) return prev;
-              return [...prev, msg].sort((a, b) => a.createdAt - b.createdAt);
-            });
-          }
+          receiveDm(event, kpSigner, kp.publicKey).then((msg) => {
+            if (msg) {
+              setMessages((prev) => {
+                if (prev.some((m) => m.id === msg.id)) return prev;
+                return [...prev, msg].sort((a, b) => a.createdAt - b.createdAt);
+              });
+            }
+          });
         }
       );
     })();
@@ -61,11 +63,11 @@ export default function ChatScreen() {
   }, []);
 
   const handleSend = async () => {
-    if (!text.trim() || !privkey || !DEMO_RECIPIENT) return;
-    const giftWrap = buildDm({ text: text.trim() }, privkey, DEMO_RECIPIENT);
-    await manager?.publish(giftWrap);
+    if (!text.trim() || !signer || !DEMO_RECIPIENT) return;
+    const { giftWraps, messageId } = await buildDm({ text: text.trim() }, signer, [DEMO_RECIPIENT]);
+    await Promise.all(giftWraps.map((giftWrap) => manager?.publish(giftWrap)));
     const sentMsg: Message = {
-      id: giftWrap.id,
+      id: messageId,
       senderPubkey: myPubkey,
       recipientPubkey: DEMO_RECIPIENT,
       content: text.trim(),

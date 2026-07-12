@@ -29,8 +29,16 @@ RUN cd apps/web && bun run build
 # --- Serve stage ---
 FROM nginx:1.27-alpine AS runner
 
+# Re-declared so the CSP's connect-src can be scoped to the real Blossom
+# origin instead of a blanket http:/https: allowance.
+ARG VITE_BLOSSOM_SERVER_URL=http://localhost:3001
+ENV BLOSSOM_ORIGIN=$VITE_BLOSSOM_SERVER_URL
+
 COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
-COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+# Rendered via nginx's built-in envsubst-on-templates entrypoint script,
+# which only substitutes names present in the environment — nginx's own
+# $uri-style runtime variables are left untouched.
+COPY apps/web/nginx.conf.template /etc/nginx/templates/default.conf.template
 
 EXPOSE 80
 

@@ -1,13 +1,11 @@
-# Blossom server — HTTP blob storage for Nostr (BUD-01/02/03)
-# Using satellite-cdn/blossom-server (Node.js reference implementation)
+# Blossom server — self-contained HTTP blob storage for Nostr (BUD-01/02/03)
 FROM oven/bun:1.1.38-alpine
 
 WORKDIR /app
 
-# Install blossom-server from npm
-RUN bun add blossom-server@^0.2.0 || true
+COPY package.json ./
+RUN bun install --production
 
-# Simple standalone blossom server entrypoint
 COPY server.js ./
 
 RUN mkdir -p /data/uploads

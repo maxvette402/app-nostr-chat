@@ -42,14 +42,21 @@ export class RelayManager {
     this.unsubscribe(id);
 
     const readRelays = this.getReadRelays();
-    if (readRelays.length === 0) return;
+    if (readRelays.length === 0 || filters.length === 0) return;
 
-    const sub = this.pool.subscribeMany(readRelays, filters, {
-      onevent: onEvent,
-      oneose: onEose,
+    // nostr-tools' SimplePool takes a single Filter per subscription; fan out
+    // to one subscription per filter (OR semantics) rather than silently
+    // dropping all but the first.
+    const subs = filters.map((filter) =>
+      this.pool.subscribeMany(readRelays, filter, {
+        onevent: onEvent,
+        oneose: onEose,
+      })
+    );
+
+    this.subscriptions.set(id, {
+      close: () => subs.forEach((sub) => sub.close()),
     });
-
-    this.subscriptions.set(id, sub);
   }
 
   unsubscribe(id: string): void {
@@ -74,11 +81,22 @@ export class RelayManager {
     await Promise.any(this.pool.publish(writeRelays, event));
   }
 
-  /** Fetch events matching a filter (one-shot query). */
+  /** Fetch events matching one or more filters (one-shot query, OR semantics). */
   async queryEvents(filters: Filter[]): Promise<Event[]> {
     const readRelays = this.getReadRelays();
-    if (readRelays.length === 0) return [];
-    return this.pool.querySync(readRelays, filters);
+    if (readRelays.length === 0 || filters.length === 0) return [];
+
+    const results = await Promise.all(
+      filters.map((filter) => this.pool.querySync(readRelays, filter))
+    );
+
+    const byId = new Map<string, Event>();
+    for (const events of results) {
+      for (const event of events) {
+        byId.set(event.id, event);
+      }
+    }
+    return [...byId.values()];
   }
 
   destroy(): void {

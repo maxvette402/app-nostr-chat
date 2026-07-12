@@ -29,6 +29,10 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3001:3001"
+    environment:
+      PUBLIC_URL: ${BLOSSOM_PUBLIC_URL:-http://localhost:3001}
+      MAX_UPLOAD_BYTES: ${BLOSSOM_MAX_UPLOAD_BYTES:-26214400}
+      ALLOWED_PUBKEYS: ${BLOSSOM_ALLOWED_PUBKEYS:-}
     volumes:
       - blossom_data:/data/uploads
     restart: unless-stopped
