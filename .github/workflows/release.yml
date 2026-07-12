@@ -1,0 +1,120 @@
+name: Release
+
+# Cut a release by pushing a semver tag:
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# This runs the full test + build, publishes the three Docker images to GHCR
+# (web, blossom, strfry) tagged with the version and `latest`, and creates a
+# GitHub Release with auto-generated notes and a source bundle attached.
+#
+# Note: the web image bakes VITE_DEFAULT_RELAYS / VITE_BLOSSOM_SERVER_URL into
+# the JS bundle at build time, so the published image ships the defaults
+# (public relays + http://localhost:3001). Deployments with a different
+# Blossom origin must build the web image themselves (docker compose does).
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Matches the bun that generated the committed bun.lock (text lockfile
+      # format, unsupported by the 1.1.x in the packageManager field).
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run tests
+        run: bun run test
+
+      - name: Build all packages
+        run: bun run build
+
+  docker:
+    name: Publish ${{ matrix.image }} image
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - image: web
+            context: .
+            dockerfile: apps/web/Dockerfile
+          - image: blossom
+            context: infra/blossom
+            dockerfile: infra/blossom/Dockerfile
+          - image: strfry
+            context: infra/strfry
+            dockerfile: infra/strfry/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}-${{ matrix.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [test, docker]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create source bundle
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          git archive --format=tar.gz \
+            --prefix="nostr-chat-${VERSION}/" \
+            -o "nostr-chat-${VERSION}.tar.gz" HEAD
+          echo "BUNDLE=nostr-chat-${VERSION}.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag \
+            "$BUNDLE"

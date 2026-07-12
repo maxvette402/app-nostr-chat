@@ -193,6 +193,36 @@ Your private key (nsec) is **never** sent to any server or relay.
 
 ---
 
+## Message Storage
+
+Messages are **stored on relays, not locally**. Here's how it works:
+
+### Send
+1. You compose a message → `buildDm()` creates a gift-wrapped rumor (kind 14)
+2. Two copies are published:
+   - One wrapped for the **recipient** (so they see it)
+   - One wrapped for **yourself** (so other devices on your identity see it)
+3. Both are sent to relays as kind 1059 events
+
+### Receive
+1. On load, the app subscribes to all kind 1059 events addressed to your pubkey
+2. Relays send back everything they have stored
+3. The app decrypts each message and displays it
+4. Messages live in the app's in-memory store (cleared on reload)
+
+### Full history on any device
+- Every device that logs in with your keypair will re-fetch the full message history from relays
+- This works because self-wrapped sent messages are stored persistently on the relay
+- No local backup needed (though you can export)
+
+### Deletion
+- Relay-stored messages can be deleted via NIP-05 deletion events (kind 5), but deletion is **best-effort** — relays may ignore it
+- Clearing the app's local cache doesn't affect relay storage
+
+**In short:** relays are your message archive. If all relays go down, you can't see old messages until they return.
+
+---
+
 ## Project Structure
 
 ```

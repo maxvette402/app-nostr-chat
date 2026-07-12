@@ -20,7 +20,7 @@ services:
     ports:
       - "${STRFRY_PORT:-7777}:7777"
     volumes:
-      - strfry_data:/app/strfry-db
+      - ${VOLUMES_PATH:-~/opt/docker/volumes-nostr}/strfry:/app/strfry-db
     restart: unless-stopped
 
   blossom:
@@ -34,9 +34,5 @@ services:
       MAX_UPLOAD_BYTES: ${BLOSSOM_MAX_UPLOAD_BYTES:-26214400}
       ALLOWED_PUBKEYS: ${BLOSSOM_ALLOWED_PUBKEYS:-}
     volumes:
-      - blossom_data:/data/uploads
+      - ${VOLUMES_PATH:-~/opt/docker/volumes-nostr}/blossom:/data/uploads
     restart: unless-stopped
-
-volumes:
-  strfry_data:
-  blossom_data:
